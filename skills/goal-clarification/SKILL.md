@@ -5,118 +5,405 @@ description: Goal clarification protocol for discussing and clarifying complex g
 
 # Goal Clarification Skill
 
-Implement the goal clarification protocol for structured discussion of complex goals.
+一个用于**结构化讨论复杂目标**的协议和工作流程。
 
-## Protocol Overview
+---
 
-This skill provides a structured workflow for:
-- Clarifying complex goals
-- Discussing solutions
-- Generating execution prompts
-- Storing discussion results
+## 🎯 为什么要做这个 Skill？
 
-## Usage
+### 问题背景
 
-When a complex goal is identified:
+在 AI 助手的使用过程中，我们发现了一个反复出现的问题：
 
-1. **Read Protocol**: Load `CLARIFICATION_PROTOCOL.md` from workspace
-2. **Start Discussion**: Follow the protocol's workflow
-3. **Goal Layer**: Ask questions to clarify goals
-4. **Solution Layer**: Present preliminary solutions and gather feedback
-5. **Confirm Completion**: Wait for user confirmation
-6. **Output Results**: Generate discussion summary + execution prompt
+**「迷失在聊天记录中」**
+- 讨论结果只是作为消息流式输出
+- 后续难以找到和回顾
+- 无法作为知识库积累
 
-## Triggers
+**「目标描述不清晰」**
+- 用户提出"大目标"时，信息往往不完整
+- 直接开始执行会导致反复修改
+- 需要一个结构化的澄清过程
 
-### Manual Trigger
-User says: "需要「使目标更清晰的讨论」"
+**「缺乏统一的讨论框架」**
+- 每次讨论都是随意的
+- 没有标准的流程和输出格式
+- Agent 和用户都在"试错"
 
-### Agent Trigger
-Agent judges that "goal is unclear or solution is complex" and asks user if discussion is needed.
+### 核心价值
 
-**Judgment Criteria:**
-- Goal is grand but current information is limited
-- Solution requires multiple steps
+这个 Skill 旨在解决上述问题：
 
-*Note: Small tasks (like "send email") do not trigger.*
+1. **结构化澄清**：提供一个标准的讨论流程（目标层 → 解法层）
+2. **结果持久化**：将讨论结果保存到 Notion，便于回顾
+3. **执行 Prompt 生成**：生成精确的执行 prompt，让后续任务执行更可靠
+4. **版本化管理**：协议本身可以迭代更新（v1.0 → v1.1 → v2.0）
 
-## Discussion Workflow
+---
 
-### Goal Layer Discussion
-Agent asks questions to supplement goal information:
-- Background and context of the goal
-- Specific requirement details
-- Expected result format
-- Time constraints or priorities
+## 🛠️ 怎么做的（实现方式）
 
-### Solution Layer Discussion
-Agent explains preliminary intended solution and asks:
-"For this goal, your currently intended solution is xxx, which of these need modification?"
+### 架构设计
 
-**Discussion Boundaries:**
-- Agent can propose better solutions during discussion
-- User can:
-  - Abort discussion → Output discussion results immediately based on current discussion
-  - Modify goal or solution → Update specific content
+```
+┌─────────────────────────────────────────────┐
+│  目标澄清讨论                     │
+│  （Goal Clarification Discussion）      │
+└─────────────────┬─────────────────────┘
+                  │
+        ┌─────────▼────────┐
+        │  输出内容：      │
+        │  1. 目标描述     │
+        │  2. 解法说明       │
+        │  3. 执行 Prompt    │
+        └─────────┬────────┘
+                  │
+        ┌─────────▼────────┐
+        │                  │
+        │  ┌──────────────┴──────────┐
+        │  │                             │
+        │  保存到 Notion (Persistence)     │
+        │  发送到 Telegram (Notification)   │
+        │                             │
+        └──────────────────────────────────┘
+```
 
-### Discussion End
-- User confirms: "我们可以完成这次讨论了"
-- Agent must confirm with user before, not judge independently
+### 核心组件
 
-## Output Content
+#### 1. 协议文件（Protocol File）
+**位置**：`CLARIFICATION_PROTOCOL.md`（workspace 根目录）
 
-### Discussion Results (Markdown)
-- More complete and clear goal description
-- Discussed solutions
-- Related constraints and notes
+**作用**：
+- 定义讨论流程（触发条件、目标层、解法层）
+- 定义输出格式（讨论结果 + 执行 prompt）
+- 定义版本化规则
 
-**Edge Case Handling:**
-- For specific tasks, if only goal/solution discussion is needed, the other output doesn't need to be too detailed.
+**内容结构**：
+```markdown
+# CLARIFICATION_PROTOCOL v1.0
 
-### Execution Prompt (Show First)
-- Generate more complete prompt based on discussion results
-- Used to re-input to AI agent for task execution
-- **Only show for display, cannot execute immediately**
+## 协议目标
+...
 
-**Prompt Requirements:**
-- Use prompt engineering techniques
-- Express discussed goals and solutions clearly and structured
-- Let models execute better
+## 触发条件
+...
 
-## Versioning Rules
+## 讨论流程
+- 目标层讨论
+- 解法层讨论
 
-### Version Number Format
-- Format: v1.0, v1.1, v2.0
-- Upgrade timing: Confirm with user when needed
+## 输出内容
+- 讨论结果
+- 执行 prompt
 
-### Version History
-- This file only stores current version
-- When upgrading, save the replaced old version to `CLARIFICATION_PROTOCOL_HISTORY.md`
+## 版本化规则
+...
+```
 
-### Modification Trigger
-- User says: "我们更新一下协议"
-- Agent actively suggests (when a rule is repeatedly broken)
+#### 2. Agent 行为（Agent Behavior）
+**触发时机**：
+- **主动触发**：用户说"需要「使目标更清晰的讨论」"
+- **被动判断**：Agent 判断"目标不清晰或解法复杂"时询问
 
-### Execution Prompt Labeling
-Execution prompt needs to label current protocol version, for example:
-> Use CLARIFICATION_PROTOCOL v1.0 generate
+**判断标准（定性）**：
+- 目标宏大但当前信息较少
+- 解法需要多个步骤
+- 小任务（如"发邮件"）不触发
 
-## Configuration
+**讨论流程**：
+1. **读取协议**：加载 `CLARIFICATION_PROTOCOL.md`
+2. **目标层讨论**：提问补充目标信息
+3. **解法层讨论**：提出初步解法并询问修改
+4. **确认完成**：等待用户说"我们可以完成这次讨论了"
+5. **输出结果**：生成讨论结果 + 执行 prompt
 
-Place protocol file at workspace root:
-- `CLARIFICATION_PROTOCOL.md` - Main protocol
-- `CLARIFICATION_PROTOCOL_HISTORY.md` - Version history
+#### 3. 结果存储（Result Persistence）
+**集成 Skills**：
+- **notion-persistence**：保存到 Notion Database
+- **telegram-notification**：发送摘要到指定群组
 
-## Dependencies
+**存储流程**：
+```
+用户确认完成
+        ↓
+生成讨论结果（Markdown）
+        ↓
+【notion-persistence】
+- 自动生成标题
+- 创建 Notion 页面
+- 包含：目标描述、解法说明、执行 prompt
+        ↓
+【telegram-notification】
+- 发送摘要到「使目标更清晰的讨论」群组
+- 包含：标题、时间、Notion 链接、摘要
+```
 
-None required for discussion protocol itself.
+#### 4. 版本管理（Version Control）
+**版本号格式**：v1.0, v1.1, v2.0
 
-## Related Skills
+**版本更新时机**：
+- 用户说"我们更新一下协议"
+- Agent 主动建议（规则反复被打破时）
 
-- **notion-persistence**: Save discussion results to Notion
-- **telegram-notification**: Send discussion summary to Telegram group
+**历史记录**：
+- 当前版本：`CLARIFICATION_PROTOCOL.md`
+- 历史版本：`CLARIFICATION_PROTOCOL_HISTORY.md`（升级时保存旧版本）
 
-Use together for complete workflow:
-1. Goal clarification (this skill)
-2. Save results (notion-persistence)
-3. Notify group (telegram-notification)
+---
+
+## 📋 使用指南
+
+### 基本流程
+
+#### 场景 1：用户主动发起讨论
+
+```
+用户："我需要变得自律，需要「使目标更清晰的讨论」"
+  ↓
+Agent：读取 CLARIFICATION_PROTOCOL.md
+  ↓
+Agent：进入目标层讨论
+  - "这个目标的背景是什么？"
+  - "具体需求是什么？"
+  - "期望的结果形式？"
+  ↓
+Agent：进入解法层讨论
+  - "我初步的解法是 xxx，你有什么修改吗？"
+  ↓
+用户："我们可以完成这次讨论了"
+  ↓
+Agent：输出讨论结果（Markdown）
+  ↓
+【notion-persistence + telegram-notification】
+- 保存到 Notion
+- 发送到群组
+```
+
+#### 场景 2：Agent 判断需要讨论
+
+```
+用户："帮我做一个 Excel 时间追踪系统"
+  ↓
+Agent 判断：目标宏大，信息不完整
+  ↓
+Agent 询问："这个目标比较复杂，需要启动目标澄清讨论吗？"
+  ↓
+用户确认后进入场景 1 的流程
+```
+
+#### 场景 3：更新协议
+
+```
+用户："我们更新一下协议"
+  ↓
+Agent：询问需要修改什么部分
+  ↓
+Agent 更新 CLARIFICATION_PROTOCOL.md
+  ↓
+Agent：将旧版本保存到 CLARIFICATION_PROTOCOL_HISTORY.md
+  ↓
+Agent：更新版本号（如 v1.0 → v1.1）
+```
+
+---
+
+## 🔧 配置说明
+
+### 协议文件（必需）
+
+**位置**：`CLARIFICATION_PROTOCOL.md`（workspace 根目录）
+
+**如何创建**：
+- Agent 可以根据用户需求动态生成
+- 也可以手动编辑
+
+**内容示例**：
+```markdown
+# 目标澄清协议 v1.0
+
+## 触发条件
+...
+
+## 讨论流程
+...
+
+## 输出内容
+...
+```
+
+### 集成 Skills（可选但推荐）
+
+#### notion-persistence
+**作用**：保存讨论结果到 Notion
+**配置**：
+- `NOTION_TOKEN`：Notion API token
+- `NOTION_DATABASE_ID`：Notion Database ID
+
+**自动集成**：
+- Agent 在讨论完成后自动调用
+- 生成标题、创建页面、返回链接
+
+#### telegram-notification
+**作用**：发送讨论摘要到 Telegram 群组
+**配置**：
+- `TELEGRAM_BOT_TOKEN`：Telegram Bot token
+- `TELEGRAM_DISCUSSION_GROUP_ID`：讨论结果群组 ID（必需）
+- `TELEGRAM_GENERAL_GROUP_ID`：一般通知群组 ID（可选）
+
+**自动集成**：
+- Agent 在讨论完成后自动调用
+- 使用 `--target discussion` 参数
+- 发送包含标题、时间、链接、摘要的消息
+
+---
+
+## 📝 输出格式
+
+### 讨论结果（Markdown）
+
+```markdown
+# 📋 讨论结果
+
+## 目标描述
+**背景**：[目标背景]
+**需求**：[具体需求]
+**约束**：[时间、优先级等]
+
+## 解法说明
+**方案**：[解决方案描述]
+**步骤**：[具体执行步骤]
+**工具**：[需要的工具或资源]
+
+## 执行 Prompt
+> 使用 CLARIFICATION_PROTOCOL v1.0 生成
+>
+> [完整的执行 prompt 内容]
+
+## 注意事项
+[相关的约束和警告]
+```
+
+### Telegram 通知格式
+
+```
+✅ 讨论结果已保存到 Notion
+
+标题：[自动生成的标题]
+时间：2026-01-31 19:00
+链接：https://www.notion.so/...
+
+摘要：[目标描述的简要总结]
+```
+
+---
+
+## 🎯 为什么这样做（核心设计理念）
+
+### 1. 结构化 vs. 随意
+**问题**：没有框架的讨论是随意的、低效的
+**解决**：标准化的流程（目标层 → 解法层）确保不遗漏关键信息
+
+### 2. 持久化 vs. 流式
+**问题**：流式输出的结果难以回顾和积累
+**解决**：保存到 Notion + 发送到 Telegram，建立可搜索的知识库
+
+### 3. 迭代 vs. 固化
+**问题**：协议需要根据使用反馈不断改进
+**解决**：版本化管理（v1.0 → v1.1），历史记录保留所有版本
+
+### 4. 解耦 vs. 耦合
+**问题**：讨论协议应该独立于存储和通知方式
+**解决**：集成 notion-persistence 和 telegram-notification，但协议本身不依赖它们
+
+---
+
+## 🚀 执行流程图
+
+```
+┌──────────────────────────────────────┐
+│         用户提出复杂目标          │
+└────────────┬─────────────────────┘
+             │
+             v
+┌──────────────────────────────────────┐
+│    Agent 判断：是否需要讨论？    │
+│    是 → 询问用户确认              │
+│    否 → 直接执行                │
+└────────────┬─────────────────────┘
+             │
+             v（用户确认）
+┌──────────────────────────────────────┐
+│      读取 CLARIFICATION_PROTOCOL     │
+│                                │
+└────────────┬─────────────────────┘
+             │
+             v
+┌──────────────────────────────────────┐
+│      目标层讨论                    │
+│      - 提问背景、需求、约束         │
+└────────────┬─────────────────────┘
+             │
+             v
+┌──────────────────────────────────────┐
+│      解法层讨论                    │
+│      - 提出初步解法                │
+│      - 征求修改建议                │
+└────────────┬─────────────────────┘
+             │
+             v
+┌──────────────────────────────────────┐
+│     用户确认："完成讨论"            │
+└────────────┬─────────────────────┘
+             │
+             v
+┌──────────────────────────────────────┐
+│      生成讨论结果（Markdown）         │
+│      - 目标描述                     │
+│      - 解法说明                     │
+│      - 执行 Prompt                 │
+└────────────┬─────────────────────┘
+             │
+             v
+┌──────────────────────────────────────┐
+│      【集成 Skills】                │
+│                                │
+│  ┌──────────┴────────────┐      │
+│  │                        │      │
+│  v                        v      │
+┌───────────────────┐  ┌──────────────────┐ │
+│  notion-persistence│  │ telegram-notification│ │
+│                  │  │                  │
+│  保存到 Notion    │  │  发送到群组      │ │
+│                  │  │                  │
+│  返回 URL        │  │  发送摘要        │
+└──────────────────┘  └──────────────────┘ │
+│                                 │      │
+└─────────────────────────────────────┘
+```
+
+---
+
+## 📚 相关资源
+
+### 协议文件
+- `CLARIFICATION_PROTOCOL.md` - 当前版本
+- `CLARIFICATION_PROTOCOL_HISTORY.md` - 历史版本
+
+### 集成 Skills
+- `notion-persistence` - Notion 存储
+- `telegram-notification` - Telegram 通知
+
+### 文档
+- `skills/README.md` - 所有 skills 的概览
+
+---
+
+## 🆘 版本信息
+
+- **当前版本**：v1.0
+- **最后更新**：2026-01-31
+- **维护者**：Clawdbot/OpenClaw 社区
+
+---
+
+*让复杂的决策变得简单、清晰、可追溯。*
