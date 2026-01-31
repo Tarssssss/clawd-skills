@@ -9,6 +9,7 @@ require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') }
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '8437521570:AAGZQ_oY5twQ_ybhW9qy6FhXYL_4oMbdYEk';
 const TELEGRAM_DISCUSSION_GROUP_ID = process.env.TELEGRAM_DISCUSSION_GROUP_ID;
 const TELEGRAM_GENERAL_GROUP_ID = process.env.TELEGRAM_GENERAL_GROUP_ID;
+const TELEGRAM_GITHUB_GROUP_ID = process.env.TELEGRAM_GITHUB_GROUP_ID;
 
 /**
  * Determine target group based on options
@@ -27,6 +28,13 @@ function getTargetGroupId(options) {
       throw new Error('TELEGRAM_DISCUSSION_GROUP_ID not configured in .env');
     }
     return TELEGRAM_DISCUSSION_GROUP_ID;
+  }
+
+  if (target === 'github') {
+    if (!TELEGRAM_GITHUB_GROUP_ID) {
+      throw new Error('TELEGRAM_GITHUB_GROUP_ID not configured in .env');
+    }
+    return TELEGRAM_GITHUB_GROUP_ID;
   }
 
   if (target === 'general') {
@@ -131,8 +139,8 @@ function sendToTelegram(options) {
       // Custom message mode, no other fields needed
     } else if (!title || !url) {
       console.log('❌ Error: Missing required options');
-      console.log('Usage: node notify-group.js --target <discussion|general> --title "Title" --url "URL" [--summary "Summary"]');
-      console.log('       node notify-group.js --target general --message "Custom message"');
+      console.log('Usage: node notify-group.js --target <discussion|github|general> --title "Title" --url "URL" [--summary "Summary"]');
+      console.log('       node notify-group.js --target github --message "GitHub push successful!"');
       console.log('       node notify-group.js --chat-id -100xxx --message "Custom message"');
       process.exit(1);
     }
