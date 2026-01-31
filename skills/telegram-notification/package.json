@@ -1,0 +1,17 @@
+{
+  "name": "telegram-notification",
+  "version": "1.0.0",
+  "description": "Send discussion summary notifications to Telegram group for easy access",
+  "main": "SKILL.md",
+  "scripts": {
+    "notify": "node scripts/notify-group.js"
+  },
+  "files": [
+    "SKILL.md",
+    "scripts/",
+    ".env.example"
+  ],
+  "dependencies": {
+    "dotenv": "^16.4.5"
+  }
+}

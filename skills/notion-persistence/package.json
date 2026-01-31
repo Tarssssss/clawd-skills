@@ -1,0 +1,19 @@
+{
+  "name": "notion-persistence",
+  "version": "1.0.0",
+  "description": "Save discussion results to Notion database for easy access and retrieval",
+  "main": "SKILL.md",
+  "scripts": {
+    "save": "node scripts/save-discussion.js",
+    "save:file": "node scripts/save-discussion.js --content-file"
+  },
+  "files": [
+    "SKILL.md",
+    "scripts/",
+    ".env.example"
+  ],
+  "dependencies": {
+    "@notionhq/client": "^2.2.15",
+    "dotenv": "^16.4.5"
+  }
+}

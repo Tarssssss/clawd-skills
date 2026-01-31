@@ -1,0 +1,11 @@
+{
+  "name": "goal-clarification",
+  "version": "1.0.0",
+  "description": "Goal clarification protocol for structured discussion of complex goals",
+  "main": "SKILL.md",
+  "files": [
+    "SKILL.md",
+    "CLARIFICATION_PROTOCOL.md",
+    "CLARIFICATION_PROTOCOL_HISTORY.md"
+  ]
+}
