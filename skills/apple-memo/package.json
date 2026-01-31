@@ -1,0 +1,23 @@
+{
+  "name": "apple-memo",
+  "version": "1.0.0",
+  "description": "Access and export Apple Notes/Memo data",
+  "main": "scripts/read-memo.js",
+  "scripts": {
+    "read": "node scripts/read-memo.js",
+    "read-notion": "node scripts/read-memo.js --save-notion",
+    "read-telegram": "node scripts/read-memo.js --send-telegram",
+    "read-all": "node scripts/read-memo.js --save-notion --send-telegram"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5"
+  },
+  "keywords": [
+    "apple-notes",
+    "apple-reminders",
+    "memo",
+    "notion",
+    "telegram",
+    "macos"
+  ]
+}
