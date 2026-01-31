@@ -1,19 +1,54 @@
 #!/usr/bin/env node
 
 /**
- * Send notification to Telegram group
+ * Send notification to Telegram groups with flexible routing
  */
 
 require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') });
 
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '8437521570:AAGZQ_oY5twQ_ybhW9qy6FhXYL_4oMbdYEk';
-const TELEGRAM_GROUP_ID = process.env.TELEGRAM_GROUP_ID || '-5079148766';
+const TELEGRAM_DISCUSSION_GROUP_ID = process.env.TELEGRAM_DISCUSSION_GROUP_ID;
+const TELEGRAM_GENERAL_GROUP_ID = process.env.TELEGRAM_GENERAL_GROUP_ID;
+
+/**
+ * Determine target group based on options
+ */
+function getTargetGroupId(options) {
+  const { target, chatId } = options;
+
+  // Priority 1: Explicit chat ID (highest priority)
+  if (chatId) {
+    return chatId;
+  }
+
+  // Priority 2: Target option
+  if (target === 'discussion') {
+    if (!TELEGRAM_DISCUSSION_GROUP_ID) {
+      throw new Error('TELEGRAM_DISCUSSION_GROUP_ID not configured in .env');
+    }
+    return TELEGRAM_DISCUSSION_GROUP_ID;
+  }
+
+  if (target === 'general') {
+    if (!TELEGRAM_GENERAL_GROUP_ID) {
+      throw new Error('TELEGRAM_GENERAL_GROUP_ID not configured in .env');
+    }
+    return TELEGRAM_GENERAL_GROUP_ID;
+  }
+
+  // Priority 3: Fallback to discussion group
+  if (TELEGRAM_DISCUSSION_GROUP_ID) {
+    return TELEGRAM_DISCUSSION_GROUP_ID;
+  }
+
+  throw new Error('No target group configured. Set TELEGRAM_DISCUSSION_GROUP_ID in .env');
+}
 
 /**
  * Send message to Telegram group
  */
 function sendToTelegram(options) {
-  const { title, url, summary, message } = options;
+  const { chatId, title, url, summary, message } = options;
 
   let text;
 
@@ -30,7 +65,7 @@ function sendToTelegram(options) {
 
   const apiUrl = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
   const payload = {
-    chat_id: TELEGRAM_GROUP_ID,
+    chat_id: chatId,
     text: text,
     parse_mode: 'Markdown',
   };
@@ -59,13 +94,21 @@ function sendToTelegram(options) {
 (() => {
   try {
     const args = process.argv.slice(2);
+    let target = null;
+    let chatId = null;
     let title = null;
     let url = null;
     let summary = null;
     let message = null;
 
     for (let i = 0; i < args.length; i++) {
-      if (args[i] === '--title' && args[i + 1]) {
+      if (args[i] === '--target' && args[i + 1]) {
+        target = args[i + 1];
+        i++;
+      } else if (args[i] === '--chat-id' && args[i + 1]) {
+        chatId = args[i + 1];
+        i++;
+      } else if (args[i] === '--title' && args[i + 1]) {
         title = args[i + 1];
         i++;
       } else if (args[i] === '--url' && args[i + 1]) {
@@ -80,18 +123,22 @@ function sendToTelegram(options) {
       }
     }
 
+    // Determine target group
+    const targetGroupId = getTargetGroupId({ target, chatId });
+
     // Validation
     if (message) {
       // Custom message mode, no other fields needed
     } else if (!title || !url) {
       console.log('❌ Error: Missing required options');
-      console.log('Usage: node notify-group.js --title "Title" --url "URL" [--summary "Summary"]');
-      console.log('       node notify-group.js --message "Custom message"');
+      console.log('Usage: node notify-group.js --target <discussion|general> --title "Title" --url "URL" [--summary "Summary"]');
+      console.log('       node notify-group.js --target general --message "Custom message"');
+      console.log('       node notify-group.js --chat-id -100xxx --message "Custom message"');
       process.exit(1);
     }
 
-    console.log('📤 Sending to Telegram...');
-    const result = sendToTelegram({ title, url, summary, message });
+    console.log(`📤 Sending to Telegram group (target: ${target || 'default'}, chat_id: ${targetGroupId})...`);
+    const result = sendToTelegram({ chatId: targetGroupId, title, url, summary, message });
     console.log('✅ Message sent successfully!');
     console.log(`🆔 Message ID: ${result.messageId}`);
   } catch (err) {

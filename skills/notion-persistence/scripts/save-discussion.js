@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * Save discussion result to Notion and notify Telegram group
+ * Save discussion result to Notion and notify Telegram discussion group
  */
 
 const { execSync } = require('child_process');
@@ -10,8 +10,8 @@ require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 
 const NOTION_TOKEN = process.env.NOTION_TOKEN;
 const NOTION_DATABASE_ID = process.env.NOTION_DATABASE_ID;
-const TELEGRAM_BOT_TOKEN = '8437521570:AAGZQ_oY5twQ_ybhW9qy6FhXYL_4oMbdYEk';
-const TELEGRAM_GROUP_ID = '-5079148766';
+const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '8437521570:AAGZQ_oY5twQ_ybhW9qy6FhXYL_4oMbdYEk';
+const TELEGRAM_GROUP_ID = process.env.TELEGRAM_GROUP_ID;
 
 /**
  * Generate title from discussion content
@@ -177,28 +177,27 @@ function createNotionPage({ title, content, date, protocolVersion }) {
 }
 
 /**
- * Send message to Telegram group
+ * Send notification to Telegram discussion group
+ * Now uses telegram-notification skill for better routing
  */
-function sendToTelegram(message) {
-  const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
-  const payload = {
-    chat_id: TELEGRAM_GROUP_ID,
-    text: message,
-    parse_mode: 'Markdown',
-  };
+function sendToTelegram({ title, url, summary }) {
+  const telegramSkillPath = path.resolve(__dirname, '../telegram-notification/scripts/notify-group.js');
 
   try {
     const result = execSync(
-      `curl -s -X POST "${url}" -H "Content-Type: application/json" -d '${JSON.stringify(payload)}'`,
+      `node "${telegramSkillPath}" --target discussion --title "${title}" --url "${url}" --summary "${summary}"`,
       { encoding: 'utf-8' }
     );
 
-    const response = JSON.parse(result);
-    if (!response.ok) {
-      throw new Error(response.description || 'Failed to send message');
+    const data = JSON.parse(result);
+    if (!data.success) {
+      throw new Error(data.message || 'Failed to send Telegram message');
     }
 
-    return { success: true, messageId: response.result.message_id };
+    return {
+      success: true,
+      messageId: data.messageId,
+    };
   } catch (err) {
     throw new Error(`Failed to send Telegram message: ${err.message}`);
   }
@@ -233,17 +232,14 @@ async function saveDiscussionResult({ content, protocolVersion = 'v1.0' }) {
     console.log('✅ Notion page created');
     console.log(`🔗 URL: ${notionResult.url}`);
 
-    // Send summary to Telegram
-    console.log('📤 Sending summary to Telegram...');
-    const telegramMessage = `✅ 讨论结果已保存到 Notion
+    // Send summary to Telegram (now uses telegram-notification skill)
+    console.log('📤 Sending summary to Telegram discussion group...');
+    const telegramResult = await sendToTelegram({
+      title: titleBase,
+      url: notionResult.url,
+      summary,
+    });
 
-标题：${titleBase}
-时间：${dateStr} ${timeStr}
-链接：${notionResult.url}
-
-摘要：${summary}`;
-
-    const telegramResult = await sendToTelegram(telegramMessage);
     console.log('✅ Telegram message sent');
     console.log(`🆔 Message ID: ${telegramResult.messageId}`);
 
