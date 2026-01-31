@@ -44,12 +44,9 @@ function getTargetGroupId(options) {
     return TELEGRAM_GENERAL_GROUP_ID;
   }
 
-  // Priority 3: Fallback to discussion group
-  if (TELEGRAM_DISCUSSION_GROUP_ID) {
-    return TELEGRAM_DISCUSSION_GROUP_ID;
-  }
-
-  throw new Error('No target group configured. Set TELEGRAM_DISCUSSION_GROUP_ID in .env');
+  // Priority 3: Explicit target required - NO fallback to prevent accidental routing to groups
+  // Only send to groups when explicitly requested via --target or --chat-id
+  throw new Error('No target specified. Use --target <discussion|github|general> or --chat-id <id> to explicitly set the destination. This prevents accidental routing to group chats.');
 }
 
 /**

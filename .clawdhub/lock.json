@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "skills": {
+    "todoist": {
+      "version": "0.2.1",
+      "installedAt": 1769715259822
+    },
+    "refactor-suggest": {
+      "version": "1.0.2",
+      "installedAt": 1769715280680
+    },
+    "resume-gen": {
+      "version": "1.0.2",
+      "installedAt": 1769715297432
+    },
+    "focus-deep-work": {
+      "version": "1.0.0",
+      "installedAt": 1769715302407
+    },
+    "email": {
+      "version": "1.1.0",
+      "installedAt": 1769717746817
+    },
+    "imap-smtp-email": {
+      "version": "0.0.1",
+      "installedAt": 1769717775423
+    },
+    "google-workspace-mcp": {
+      "version": "1.0.0",
+      "installedAt": 1769719514170
+    },
+    "imap-email": {
+      "version": "1.0.2",
+      "installedAt": 1769720048514
+    },
+    "agentmail": {
+      "version": "1.1.1",
+      "installedAt": 1769720057881
+    }
+  }
+}
