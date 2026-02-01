@@ -4,55 +4,19 @@
  * Save discussion result to Notion and notify Telegram discussion group
  */
 
-const { execSync } = require('child_process');
+const { execSync, exec } = require('child_process');
 const path = require('path');
+const { generateTitle, extractSummary, extractBackground } = require('./utils.js');
+const { promisify } = require('util');
+const execAsync = promisify(exec);
 require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 
 const NOTION_TOKEN = process.env.NOTION_TOKEN;
 const NOTION_DATABASE_ID = process.env.NOTION_DATABASE_ID;
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '8437521570:AAGZQ_oY5twQ_ybhW9qy6FhXYL_4oMbdYEk';
 const TELEGRAM_GROUP_ID = process.env.TELEGRAM_GROUP_ID;
-
-/**
- * Generate title from discussion content
- */
-function generateTitle(content) {
-  const lines = content.split('\n');
-
-  // Try to extract from markdown headers
-  for (const line of lines) {
-    if (line.startsWith('## ')) {
-      return line.replace('## ', '').trim();
-    }
-  }
-
-  // Fallback: use first meaningful line
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (trimmed.length > 0 && !trimmed.startsWith('#') && !trimmed.startsWith('```')) {
-      return trimmed.substring(0, 30);
-    }
-  }
-
-  return '讨论结果';
-}
-
-/**
- * Extract summary from content
- */
-function extractSummary(content) {
-  const lines = content.split('\n');
-
-  // Find first paragraph
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (trimmed.length > 0 && !trimmed.startsWith('#') && !trimmed.startsWith('```') && !trimmed.startsWith('---')) {
-      return trimmed.substring(0, 100);
-    }
-  }
-
-  return '讨论内容...';
-}
+const TELEGRAM_DISCUSSION_GROUP_ID = process.env.TELEGRAM_DISCUSSION_GROUP_ID;
+const TELEGRAM_DAILY_REPORT_GROUP_ID = process.env.TELEGRAM_DAILY_REPORT_GROUP_ID;
 
 /**
  * Create Notion page
@@ -141,6 +105,22 @@ function createNotionPage({ title, content, date, protocolVersion }) {
     };
   }
 
+  // Add 背景 (Background) property
+  const background = extractBackground ? extractBackground(content) : '';
+  if (background && background !== '无背景信息') {
+    pageData.properties.Background = {
+      rich_text: [{ type: 'text', text: { content: background } }],
+    };
+  }
+
+  // Add 摘要 (Summary) property
+  const summary = extractSummary ? extractSummary(content) : '';
+  if (summary && summary !== '讨论内容...') {
+    pageData.properties.Summary = {
+      rich_text: [{ type: 'text', text: { content: summary } }],
+    };
+  }
+
   // Add content blocks
   if (blocks.length > 0) {
     pageData.children = blocks;
@@ -160,7 +140,7 @@ function createNotionPage({ title, content, date, protocolVersion }) {
     // Get page URL
     const pageId = data.id;
     const urlResult = execSync(
-      `curl -s -X POST "https://api.notion.com/v1/pages/${pageId}" -H "Authorization: Bearer ${NOTION_TOKEN}" -H "Notion-Version: 2022-06-28"`,
+      `curl -s "https://api.notion.com/v1/pages/${pageId}" -H "Authorization: Bearer ${NOTION_TOKEN}" -H "Notion-Version: 2022-06-28"`,
       { encoding: 'utf-8' }
     );
 
@@ -177,26 +157,51 @@ function createNotionPage({ title, content, date, protocolVersion }) {
 }
 
 /**
- * Send notification to Telegram discussion group
- * Now uses telegram-notification skill for better routing
+ * Send notification to Telegram groups
+ * Direct implementation (not using external script)
  */
-function sendToTelegram({ title, url, summary }) {
-  const telegramSkillPath = path.resolve(__dirname, '../telegram-notification/scripts/notify-group.js');
+async function sendToTelegram({ title, url, summary, target = 'discussion' }) {
+  // Get target group ID
+  let chatId;
+  if (target === 'discussion') {
+    chatId = TELEGRAM_DISCUSSION_GROUP_ID;
+  } else if (target === 'daily_report') {
+    chatId = TELEGRAM_DAILY_REPORT_GROUP_ID;
+  } else {
+    throw new Error(`Unknown target: ${target}`);
+  }
+
+  if (!chatId) {
+    throw new Error(`Telegram group ID for target '${target}' not configured`);
+  }
+
+  // Build message
+  const text = `✅ 讨论结果已保存到 Notion
+
+标题：${title}
+链接：${url}${summary ? `\n\n摘要：${summary}` : ''}`;
+
+  const apiUrl = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
+  const payload = {
+    chat_id: chatId,
+    text: text,
+    parse_mode: 'Markdown',
+  };
 
   try {
-    const result = execSync(
-      `node "${telegramSkillPath}" --target discussion --title "${title}" --url "${url}" --summary "${summary}"`,
-      { encoding: 'utf-8' }
+    const { stdout, stderr } = await execAsync(
+      `curl -s -X POST "${apiUrl}" -H "Content-Type: application/json" -d '${JSON.stringify(payload)}'`,
+      { encoding: 'utf-8', shell: '/bin/bash' }
     );
 
-    const data = JSON.parse(result);
-    if (!data.success) {
-      throw new Error(data.message || 'Failed to send Telegram message');
+    const response = JSON.parse(stdout || stderr || '{}');
+    if (!response.ok) {
+      throw new Error(response.description || 'Failed to send message');
     }
 
     return {
       success: true,
-      messageId: data.messageId,
+      messageId: response.result.message_id,
     };
   } catch (err) {
     throw new Error(`Failed to send Telegram message: ${err.message}`);
@@ -206,9 +211,10 @@ function sendToTelegram({ title, url, summary }) {
 /**
  * Main function
  */
-async function saveDiscussionResult({ content, protocolVersion = 'v1.0' }) {
+async function saveDiscussionResult({ content, protocolVersion = 'v1.0', target = 'discussion' }) {
   try {
     console.log('📄 Saving discussion result...');
+    console.log(`📊 Content length: ${content.length} characters`);
 
     // Generate title
     const titleBase = generateTitle(content);
@@ -216,9 +222,13 @@ async function saveDiscussionResult({ content, protocolVersion = 'v1.0' }) {
     const dateStr = now.toISOString().slice(0, 10);
     const timeStr = now.toTimeString().slice(0, 5).replace(':', '');
     const title = `${dateStr} ${timeStr} - ${titleBase}`;
+    console.log(`📝 Generated title: ${titleBase}`);
 
-    // Extract summary
+    // Extract summary and background
     const summary = extractSummary(content);
+    const background = extractBackground(content);
+    console.log(`📋 Extracted summary: ${summary.substring(0, 50)}...`);
+    console.log(`📋 Extracted background: ${background.substring(0, 50)}...`);
 
     // Create Notion page
     console.log('📄 Creating Notion page...');
@@ -233,11 +243,12 @@ async function saveDiscussionResult({ content, protocolVersion = 'v1.0' }) {
     console.log(`🔗 URL: ${notionResult.url}`);
 
     // Send summary to Telegram (now uses telegram-notification skill)
-    console.log('📤 Sending summary to Telegram discussion group...');
+    console.log(`📤 Sending summary to Telegram (target: ${target})...`);
     const telegramResult = await sendToTelegram({
       title: titleBase,
       url: notionResult.url,
       summary,
+      target,
     });
 
     console.log('✅ Telegram message sent');
@@ -260,6 +271,7 @@ async function saveDiscussionResult({ content, protocolVersion = 'v1.0' }) {
     const args = process.argv.slice(2);
     let content = null;
     let protocolVersion = 'v1.0';
+    let target = 'discussion';
 
     for (let i = 0; i < args.length; i++) {
       if (args[i] === '--content' && args[i + 1]) {
@@ -272,17 +284,20 @@ async function saveDiscussionResult({ content, protocolVersion = 'v1.0' }) {
         const fs = require('fs');
         content = fs.readFileSync(args[i + 1], 'utf-8');
         i++;
+      } else if (args[i] === '--target' && args[i + 1]) {
+        target = args[i + 1];
+        i++;
       }
     }
 
     if (!content) {
       console.log('❌ Error: Missing --content or --content-file');
-      console.log('Usage: node save-discussion.js --content "Discussion result" [--protocol v1.0]');
+      console.log('Usage: node save-discussion.js --content "Discussion result" [--protocol v1.0] [--target discussion|daily_report]');
       console.log('       node save-discussion.js --content-file result.md [--protocol v1.0]');
       process.exit(1);
     }
 
-    const result = await saveDiscussionResult({ content, protocolVersion });
+    const result = await saveDiscussionResult({ content, protocolVersion, target });
     console.log('\n🎉 All done!');
   } catch (err) {
     console.error('❌ Fatal error:', err.message);

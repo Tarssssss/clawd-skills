@@ -10,6 +10,7 @@ const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '8437521570:AAGZQ_o
 const TELEGRAM_DISCUSSION_GROUP_ID = process.env.TELEGRAM_DISCUSSION_GROUP_ID;
 const TELEGRAM_GENERAL_GROUP_ID = process.env.TELEGRAM_GENERAL_GROUP_ID;
 const TELEGRAM_GITHUB_GROUP_ID = process.env.TELEGRAM_GITHUB_GROUP_ID;
+const TELEGRAM_DAILY_REPORT_GROUP_ID = process.env.TELEGRAM_DAILY_REPORT_GROUP_ID;
 
 /**
  * Determine target group based on options
@@ -44,9 +45,16 @@ function getTargetGroupId(options) {
     return TELEGRAM_GENERAL_GROUP_ID;
   }
 
+  if (target === 'daily_report') {
+    if (!TELEGRAM_DAILY_REPORT_GROUP_ID) {
+      throw new Error('TELEGRAM_DAILY_REPORT_GROUP_ID not configured in .env');
+    }
+    return TELEGRAM_DAILY_REPORT_GROUP_ID;
+  }
+
   // Priority 3: Explicit target required - NO fallback to prevent accidental routing to groups
   // Only send to groups when explicitly requested via --target or --chat-id
-  throw new Error('No target specified. Use --target <discussion|github|general> or --chat-id <id> to explicitly set the destination. This prevents accidental routing to group chats.');
+  throw new Error('No target specified. Use --target <discussion|github|general|daily_report> or --chat-id <id> to explicitly set the destination. This prevents accidental routing to group chats.');
 }
 
 /**
@@ -136,7 +144,7 @@ function sendToTelegram(options) {
       // Custom message mode, no other fields needed
     } else if (!title || !url) {
       console.log('❌ Error: Missing required options');
-      console.log('Usage: node notify-group.js --target <discussion|github|general> --title "Title" --url "URL" [--summary "Summary"]');
+      console.log('Usage: node notify-group.js --target <discussion|github|general|daily_report> --title "Title" --url "URL" [--summary "Summary"]');
       console.log('       node notify-group.js --target github --message "GitHub push successful!"');
       console.log('       node notify-group.js --chat-id -100xxx --message "Custom message"');
       process.exit(1);
@@ -146,6 +154,9 @@ function sendToTelegram(options) {
     const result = sendToTelegram({ chatId: targetGroupId, title, url, summary, message });
     console.log('✅ Message sent successfully!');
     console.log(`🆔 Message ID: ${result.messageId}`);
+
+    // Output JSON for programmatic use
+    console.log(JSON.stringify(result));
   } catch (err) {
     console.error('❌ Error:', err.message);
     process.exit(1);
