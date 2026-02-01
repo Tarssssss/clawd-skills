@@ -1,0 +1,31 @@
+name: Telegram Notification on Push
+
+on:
+  push:
+    branches: [ master, main ]
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Send Telegram notification
+        run: |
+          # Get commit info
+          COMMIT_MESSAGE=$(git log -1 --pretty=%B)
+          COMMIT_AUTHOR=$(git log -1 --pretty=%an)
+          COMMIT_URL="${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}"
+          
+          # Call telegram-notification skill
+          cd skills/telegram-notification
+          node scripts/notify-group.js \
+            --target general \
+            --message "✅ GitHub Push 成功！
+
+📝 提交：${COMMIT_MESSAGE:0:50}...
+👤 作者：${COMMIT_AUTHOR}
+🔗 链接：${COMMIT_URL}
+
+📦 仓库：${{ github.repository }}"
+🌿 分支：${{ github.ref_name }}"
+"
