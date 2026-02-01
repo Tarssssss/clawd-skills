@@ -1,0 +1,13 @@
+{
+  "name": "notion-persistence-universal",
+  "version": "1.0.0",
+  "description": "Universal Notion saver with type-driven configuration",
+  "main": "scripts/save-content.js",
+  "scripts": {
+    "save": "node scripts/save-content.js",
+    "test": "node scripts/save-content.js --content 'Test' --type discussion"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5"
+  }
+}
